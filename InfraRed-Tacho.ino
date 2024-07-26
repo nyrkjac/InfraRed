@@ -4,38 +4,49 @@
 
 rgb_lcd lcd;
 
-const int IR = 4;
-// LCD-Backlight
-const int colorR = 0;
-const int colorG = 255;
-const int colorB = 0;
-// variables for time between objects
+const int IR_pin = 4;
+const int LCD_colorR = 0;
+const int LCD_colorG = 255;
+const int LCD_colorB = 0;
+const int amount = 6;  // number of spokes to average
+const int debounce_time = 5;  // minimum time between objects in ms
+
 unsigned long lastTime = 0;
 unsigned long currentTime = 0;
-const int amount = 6;  // choose how many spokes get averaged
 int timeList[amount];
 int counter = 0;
-int objects = 0;  // counts total objects
+int objects = 1;  // counts total objects (gets first updated with 2nd object)
 
 // initializes list by putting int 0 in each element
 void initList() {
-  for (byte i = 0; i < amount - 1; i++) {
+  for (byte i = 0; i < amount; i++) {
     timeList[i] = 0;
   }
 }
 
+void printLCD(unsigned long duration, int objects) {
+  // clear LCD and print new time
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print(duration);
+  lcd.print("ms since obj");
+  lcd.setCursor(0, 1);
+  lcd.print(objects);
+  lcd.print(" in total");
+}
+
 // stores times in a list and prints average every [amount] times
-void addTime() {
-  objects++;
+void addTime(unsigned long duration) {
+  timeList[counter] = duration;
   if (counter == amount - 1) {
     // this code runs every [amount] times
     int total = 0;
-    for (byte i = 0; i < amount - 1; i++) {
-      total = total + timeList[i];
+    for (byte i = 0; i < amount; i++) {
+      total += timeList[i];
     }
-    float avg = (total / amount) + 0.5;
-    int avgRound = (int)avg;
-    Serial.println(avgRound);  // print avg of last [amount] times to the console
+    float avgFloat = static_cast<float>(total) / amount;
+    int avgInt = static_cast<int>(avgFloat + 0.5);  // round te nearest int
+    Serial.println(avgInt);  // print avg of last [amount] times to the console
     counter = 0;
   } else {
     counter++;
@@ -43,46 +54,44 @@ void addTime() {
   lastTime = currentTime;  // set time for next measurement
 }
 
+void waitForObject() {
+  while (digitalRead(IR_pin) == HIGH) {
+    // do nothing, just wait for an object
+  }
+}
+
+void waitForSpace() {
+  while (digitalRead(IR_pin) == LOW) {
+    // do nothing, just wait for the object to leave
+  }
+}
+
 void setup() {
-  pinMode(IR, INPUT);
+  pinMode(IR_pin, INPUT);
   lcd.begin(16, 2);  // for a 16 by 2 pixels LCD
-  lcd.setRGB(colorR, colorG, colorB);
+  lcd.setRGB(LCD_colorR, LCD_colorG, LCD_colorB);
   initList();
   Serial.begin(9600);
 }
 
 void loop() {
-  int receiverState = digitalRead(IR);
+  int receiverState = digitalRead(IR_pin);
   if (receiverState == LOW) {
-    // this code executes if there is an object
-    if (lastTime == 0) {
-      // first object detected
-      lastTime = millis();
-    } else {
-      // second object detected
-      currentTime = millis();
+    // code executes if an object is detected
+    currentTime = millis();
+    if (lastTime != 0) {
+      // calculate time between objects
       unsigned long duration = currentTime - lastTime;
-      if (duration > 5) {
-        timeList[counter] = duration;
-        addTime();
+      if (duration > debounce_time) {
+        // objects within 5ms of the last one will be ignored. This yields better results with poor sensors
+        objects++;
+        addTime(duration);
+        printLCD(duration, objects);
       }
-
-      // clear LCD and print new time
-      lcd.clear();
-      lcd.setCursor(0, 0);
-      lcd.print(duration);
-      lcd.print("ms since obj");
-      lcd.setCursor(0, 1);
-      lcd.print(objects);
-      lcd.print(" in total");
     }
-    while (digitalRead(IR) == LOW) {
-      // do nothing, just wait until the object is gone
-    }
+    waitForSpace();
   } else {
-    // this code executes when there is no object
-    while (digitalRead(IR) == HIGH) {
-      // wait for object (this loop prevents console spam)
-    }
+    // code executes when there is no object
+    waitForObject();
   }
 }
