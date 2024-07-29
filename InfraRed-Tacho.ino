@@ -9,7 +9,7 @@ const int LCD_colorR = 0;
 const int LCD_colorG = 255;
 const int LCD_colorB = 0;
 const int amount = 6;  // number of spokes to average
-const int debounce_time = 5;  // minimum time between objects in ms
+const int debounce_time = 10;  // minimum time between objects in ms
 
 unsigned long lastTime = 0;
 unsigned long currentTime = 0;
@@ -88,6 +88,8 @@ void loop() {
         addTime(duration);
         printLCD(duration, objects);
       }
+    } else {
+      lastTime = currentTime;
     }
     waitForSpace();
   } else {
